@@ -6,7 +6,7 @@ plugins {
 
 group = 'com.example.rabbitmq'
 version = '0.0.1-SNAPSHOT'
-sourceCompatibility = '17'
+sourceCompatibility = '11'
 
 configurations {
 	compileOnly {
@@ -31,7 +31,8 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.springframework.amqp:spring-rabbit-test'
 	testImplementation 'org.testcontainers:junit-jupiter'
-	testImplementation 'org.testcontainers:rabbitmq'
+	testImplementation 'org.testcontainers:rabbitmq'	
+	implementation 'org.apache.commons:commons-collections4:4.0'	
 }
 
 dependencyManagement {
@@ -41,5 +42,5 @@ dependencyManagement {
 }
 
 tasks.named('test') {
-	useJUnitPlatform()
+//	useJUnitPlatform()
 }

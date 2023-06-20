@@ -7,7 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-
+import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Declarable;
@@ -15,9 +15,12 @@ import org.springframework.amqp.core.Declarables;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.annotation.EnableRabbit;
+import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
+import org.springframework.amqp.rabbit.listener.RabbitListenerContainerFactory;
+import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -30,15 +33,17 @@ public class RabbitConfig {
 	private static final String PASS = "admin";
 	private static final String VIRTUAL_HOST = "ExampleVirtualHost";
 
-	private static final String EXCHANGE = "com.example.rabbitmq.project.pubsub";
+	public static final String EXCHANGE = "com.example.rabbitmq.project.pubsub";
+	public static final String EXCHANGE_RETRY = "com.example.rabbitmq.project.pubsub-retry";
 	private static final String X_DEAD_LETTER_EXCHANGE = "x-dead-letter-exchange";
-	private static final long RETRY_TTL = TimeUnit.MINUTES.toMillis(15L);
-	private static final long DEAD_LETTER_TTL = TimeUnit.DAYS.toMillis(15L);
+	private static final long RETRY_TTL = TimeUnit.SECONDS.toMillis(30L);
+	private static final long DEAD_LETTER_TTL = TimeUnit.MINUTES.toMillis(1L);
 	private static final String X_MESSAGE_TTL = "x-message-ttl";
 
 	public static final String QUEUE_ORDER = "com.example.rabbitmq.project.order";
 	public static final String QUEUE_STOCK = "com.example.rabbitmq.project.stock";
 	public static final String ORDER_ROUTING_KEY = "com.example.rabbitmq.order";
+	public static final String STOCK_ROUTING_KEY = "com.example.rabbitmq.stock";
 
 	private Collection<Declarable> orderQueueDeclarations() {
 		String queueName = QUEUE_ORDER;
@@ -48,7 +53,7 @@ public class RabbitConfig {
 
 	private Collection<Declarable> stockQueueDeclarations() {
 		String queueName = QUEUE_STOCK;
-		String routingKey = ORDER_ROUTING_KEY;
+		String routingKey = STOCK_ROUTING_KEY;
 		return generateDefaultQueueWithRetryAndDeadletter(queueName, routingKey);
 	}
 
@@ -59,7 +64,7 @@ public class RabbitConfig {
 		Collection<Declarable> orderQueueDeclarations = orderQueueDeclarations();
 		Collection<Declarable> stockQueueDeclarations = stockQueueDeclarations();
 
-		Collection<Declarable> declarablesCollection = new ArrayList();
+		Collection<Declarable> declarablesCollection = new ArrayList<Declarable>();
 		declarablesCollection.addAll(exchangesDeclarations);
 		declarablesCollection.addAll(orderQueueDeclarations);
 		declarablesCollection.addAll(stockQueueDeclarations);
@@ -71,6 +76,10 @@ public class RabbitConfig {
 		TopicExchange exchange = exchangePrincipal();
 		TopicExchange exchangeDeadLetter = exchangePrincipalDeadLetter();
 		TopicExchange exchangeRetry = exchangePrincipalRetry();
+		
+		//Binding exhangeBinding = BindingBuilder.bind(exchange).to(exchangeDeadLetter).with(ORDER_ROUTING_KEY); 
+		
+		    //regularBinding(exchange.getName(), exchangeDeadLetter.getName(), ORDER_ROUTING_KEY)
 
 		return List.of(exchange, exchangeDeadLetter, exchangeRetry);
 	}
@@ -81,8 +90,8 @@ public class RabbitConfig {
 		Queue queueDeadLetter = generateRegularDeadLetterQueue(queueName);
 
 		Binding queueBind = regularBinding(queue, exchangePrincipal(), routingKey);
-		Binding queueBindRetry = regularBinding(queue, exchangePrincipalRetry(), routingKey);
-		Binding queueBindDeadLetter = regularBinding(queue, exchangePrincipalDeadLetter(), routingKey);
+		Binding queueBindRetry = regularBinding(queueRetry, exchangePrincipalRetry(), routingKey);
+		Binding queueBindDeadLetter = regularBinding(queueDeadLetter, exchangePrincipalDeadLetter(), routingKey);
 
 		return List.of(queue, queueBind, queueRetry, queueBindRetry, queueDeadLetter, queueBindDeadLetter);
 	}
@@ -126,7 +135,7 @@ public class RabbitConfig {
 		return resource.concat("-deadletter");
 	}
 
-	private static String toRetry(final String resource) {
+	public static String toRetry(final String resource) {
 		return resource.concat("-retry");
 	}
 
@@ -157,6 +166,16 @@ public class RabbitConfig {
 	@Bean
 	RabbitAdmin rabbitAdmin(ConnectionFactory connectionFactory) {
 		return new RabbitAdmin(connectionFactory);
+	}
+	
+	@Bean
+	RabbitListenerContainerFactory<SimpleMessageListenerContainer> rabbitContainerFactory(ConnectionFactory connection) {
+	  SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
+	  factory.setConnectionFactory(connection);
+	  factory.setAcknowledgeMode(AcknowledgeMode.MANUAL);
+	  factory.setPrefetchCount(1);
+	  
+	  return factory;
 	}
 
 }
